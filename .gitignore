@@ -1,0 +1,2 @@
+.vagrant
+roles/ansible-elasticsearch/.*

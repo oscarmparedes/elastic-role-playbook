@@ -1,0 +1,16 @@
+[vagrant]
+#controller ansible_connection=local
+master     ansible_host=192.168.50.20 ansible_user=vagrant ansible_ssh_private_key_file=.vagrant/machines/master/virtualbox/private_key 
+node1      ansible_host=192.168.50.11 ansible_user=vagrant ansible_ssh_private_key_file=.vagrant/machines/node1/virtualbox/private_key 
+node2      ansible_host=192.168.50.12 ansible_user=vagrant ansible_ssh_private_key_file=.vagrant/machines/node2/virtualbox/private_key 
+
+[vagrant:vars]
+es_jvm_heap_size_gb=256m
+es_is_data=true
+es_is_master=true
+
+[kibana]
+master     ansible_host=192.168.50.20 ansible_user=vagrant ansible_ssh_private_key_file=.vagrant/machines/master/virtualbox/private_key
+
+[s3-backup]
+master     ansible_host=192.168.50.20 ansible_user=vagrant ansible_ssh_private_key_file=.vagrant/machines/master/virtualbox/private_key

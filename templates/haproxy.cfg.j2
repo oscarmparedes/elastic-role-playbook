@@ -1,0 +1,58 @@
+global
+    log         127.0.0.1 local2 info alert
+
+    chroot      /var/lib/haproxy
+    pidfile     /var/run/haproxy.pid
+    maxconn     4000
+    user        haproxy
+    group       haproxy
+    daemon
+
+    # turn on stats unix socket
+    stats socket /var/lib/haproxy/stats
+
+defaults
+    mode                    http
+    log                     global
+    option                  httplog
+    option                  dontlognull
+    option http-server-close
+    option forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+    timeout http-keep-alive 10s
+    timeout check           10s
+    maxconn                 3000
+
+
+frontend https-frontend
+   bind 0.0.0.0:443 ssl crt {{ haproxy_ssl_cert_file }}
+   reqadd X-Forwarded-Proto:\ https
+   default_backend elastic-backend
+{% if kibana_install | default(False) -%}
+   acl acl_kibana path_beg {{ kibana_options.server.basePath | default('/kibana') }}/
+   acl acl_kibana path {{ kibana_options.server.basePath | default('/kibana') }}
+   use_backend kibana-backend if acl_kibana
+{% endif -%}
+
+backend elastic-backend
+   redirect scheme https if !{ ssl_fc }
+   {% for es_host in es_config['discovery.zen.ping.unicast.hosts'].split(',') -%}
+     server es-{{ loop.index }} {{ es_host | replace(":9300", '') }}:9200 check ssl verify required ca-file /etc/elasticsearch/{{ es_instance_name }}/root-ca.pem
+   {% endfor %}
+
+{% if kibana_install | default(False) -%}
+backend kibana-backend
+   redirect scheme https if !{ ssl_fc }
+   mode http
+   balance leastconn
+   reqrep ^([^\ ]*)\ /kibana[/]?(.*) \1\ /\2
+   {% for kibana_host in es_config['discovery.zen.ping.unicast.hosts'].split(',') -%}
+     server kibana-{{ loop.index }} {{ es_host | replace(":9300", '') }}:{{ kibana_options.server.port | default(5601) }} check ssl verify none
+   {% endfor %}
+{% endif -%}

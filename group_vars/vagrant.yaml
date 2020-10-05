@@ -1,0 +1,135 @@
+es_config:
+  cluster.name: "vagrant-lab"
+  discovery.zen.ping.unicast.hosts: "192.168.50.20:9300,192.168.50.11:9300,192.168.50.12:9300"
+  discovery.zen.minimum_master_nodes: 2
+  cluster.initial_master_nodes: "192.168.50.20"
+  bootstrap.system_call_filter: false
+  http.port: 9200
+  node.data: "{{ es_is_data | bool | default(true) }}"
+  node.master: "{{ es_is_master | bool | default(true) }}"
+  bootstrap.memory_lock: true
+  network.host: '{{ ansible_eth1.ipv4.address }}'
+  
+es_major_version: "7.x"
+es_version: "7.7.0"
+es_restart_on_change: true
+es_heap_size: "{{ es_jvm_heap_size_gb | default('2g') }}"
+es_api_basic_auth_username: elastic
+es_api_basic_auth_password: changeMe
+admin: "{{ es_api_basic_auth_username }}:{{ es_api_basic_auth_password }}"
+es_enable_http_ssl: true
+es_enable_transport_ssl: true
+es_ssl_key: files/myCA.key
+#es_ssl_key_password:
+es_ssl_certificate: files/myCA.pem
+es_validate_certs: no
+es_api_uri: https://{{ ansible_eth1.ipv4.address }}:9200
+es_api_host: '{{ ansible_eth1.ipv4.address }}'
+es_api_port: 9200
+es_plugins:
+- plugin: repository-s3
+
+
+#openssl genrsa -out myCA.key 2048
+#openssl req -x509 -new -nodes -key myCA.key -sha256 -days 1825 -out myCA.pem
+#es_enable_auto_ssl_configuration: true 
+
+#to start from here:
+#ansible-playbook -i inventories/vagrant deploy_cluster.yaml --ask-become-pass --limit master,node1 --start-at-task="Wait for elasticsearch to startup" --step
+#and then you hit continue, then stop at s3 configuration tasks.
+
+es_users:
+  native:
+    elastic:
+      password: "{{ es_api_basic_auth_password }}"
+      roles:
+        - admin
+    x-calculation-index:
+      password: x-calculation-index
+      roles:
+        - dev-int
+        - fms
+    x-calculation-staging:
+      password: x-calculation-staging
+      roles:
+        - dev-staging
+        - fms
+    x-calculation-qa:
+      password: x-calculation-qa
+      roles:
+        - dev-qa
+        - fms
+es_roles:
+  native:
+    dev-int:
+      cluster:
+        - manage_index_templates
+        - monitor
+      indices:
+        - names: 'x-calculation-index-*'
+          privileges:
+            - all
+    dev-staging:
+      cluster:
+        - manage_index_templates
+        - monitor
+      indices:
+        - names: 'x-calculation-staging-*'
+          privileges:
+            - all
+    dev-qa:
+      cluster:
+        - manage_index_templates
+        - monitor
+      indices:
+        - names: 'x-calculation-qa-*'
+          privileges:
+            - all
+    fms:
+      cluster: []
+      indices: []
+      applications:
+        - application: kibana-.kibana
+          privileges:
+          - feature_discover.all
+          - feature_visualize.all
+          - feature_dashboard.all
+          - feature_canvas.all
+          - feature_maps.all
+          - feature_infrastructure.all
+          - feature_logs.all
+          - feature_apm.all
+          - feature_uptime.all
+          - feature_siem.all
+          - feature_dev_tools.all
+          - feature_advancedSettings.all
+          - feature_indexPatterns.all
+          - feature_savedObjectsManagement.all
+          resources:
+          - 'space:fms'
+
+#kibana vars
+kibana_version: "{{ es_major_version }}"
+kibana_elasticsearch_url: "https://{{ ansible_eth1.ipv4.address }}:{{ es_api_port }}"
+kibana_service_state: started
+kibana_service_enabled: true
+kibana_server_port: 5601
+kibana_server_host: "{{ ansible_eth1.ipv4.address }}"
+kibana_elasticsearch_username: "{{ es_api_basic_auth_username }}"
+kibana_elasticsearch_password: "{{ es_api_basic_auth_password }}"
+kibana_config_template: kibana.yml.j2
+kibana_config_file_path: /etc/kibana/kibana.yml
+kibana_ssl_enabled: True
+kibana_cert_path: "/etc/elasticsearch/certs/myCA.pem"
+kibana_cert_key_path: "/etc/elasticsearch/certs/myCA.key"
+kibana_url: "https://{{ ansible_eth1.ipv4.address }}:{{kibana_server_port}}"
+
+# s3 backup settings
+s3_endpoint: http://localhost:9000
+s3_access_key: minioadmin
+s3_secret_key: minioadmin
+s3_protocol: http
+check_ssl_certificate: False
+check_ssl_hostname: False
+use_https: False
+cluster_name: vagrant-lab

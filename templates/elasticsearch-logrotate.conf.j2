@@ -1,0 +1,37 @@
+/var/log/elasticsearch/{{ inventory_hostname }}-{{ es_instance_name }}/logrotate-dummy {
+  daily
+  rotate 0
+  create 0400 elasticsearch elasticsearch
+  ifempty
+  lastaction
+      /usr/bin/find /var/log/elasticsearch/{{ inventory_hostname }}-{{ es_instance_name }}/ -name "{{ cluster_name }}-*.log.gz" -mtime +7 -delete
+      /usr/bin/find /var/log/elasticsearch/{{ inventory_hostname }}-{{ es_instance_name }}/ -name "{{ cluster_name }}-*.log" -mtime +1 -exec gzip -q {} \;
+  endscript
+}
+
+/var/log/elasticsearch/{{ inventory_hostname }}-{{ es_instance_name }}/{{ cluster_name }}_deprecation.log {
+  rotate 7
+  daily
+  compress
+  notifempty
+  missingok
+  copytruncate
+}
+
+/var/log/elasticsearch/{{ inventory_hostname }}-{{ es_instance_name }}/{{ cluster_name }}_index_indexing_slowlog.log {
+  rotate 7
+  daily
+  compress
+  notifempty
+  missingok
+  copytruncate
+}
+
+/var/log/elasticsearch/{{ inventory_hostname }}-{{ es_instance_name }}/{{ cluster_name }}_index_search_slowlog.log {
+  rotate 7
+  daily
+  compress
+  notifempty
+  missingok
+  copytruncate
+}

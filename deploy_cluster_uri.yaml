@@ -1,0 +1,169 @@
+- hosts: all
+  #serial: 1
+  become: true
+  roles:
+    - role: elastic.elasticsearch
+  
+
+#for logs: https://www.elastic.co/guide/en/elasticsearch/reference/current/logging.html
+
+- name: "CONFIGURE PLUGIN: s3"
+  hosts: s3-backup
+
+  # we need to configure the s3-repository which is used for backups
+  # there are 2 parts to configure:
+  # https://www.elastic.co/guide/en/elasticsearch/plugins/6.3/repository-s3-client.html
+  # https://www.elastic.co/guide/en/elasticsearch/plugins/6.3/repository-s3-repository.html
+
+  tasks:
+    - name: create default index template
+      uri:
+        url: "{{ es_api_uri }}/_template/solera-standard"
+        validate_certs: false
+        user: "{{ es_api_basic_auth_username }}"
+        password: "{{ es_api_basic_auth_password }}"
+        method: PUT
+        body: "{{ lookup('template','solera-standard-index-template.json.j2') }}"
+        force_basic_auth: yes
+        status_code: 200
+        body_format: json
+      run_once: True
+
+#S3 configuration
+
+    - name: "CONFIGURE PLUGIN: s3 | create keystore if it does not already exist"
+      shell: /usr/share/elasticsearch/bin/elasticsearch-keystore create
+      args:
+        creates: "/etc/elasticsearch/elasticsearch.keystore" 
+      environment:
+        ES_PATH_CONF: "/etc/elasticsearch/"
+      tags: ['s3-repo']
+    
+    
+    - name: "CONFIGURE PLUGIN: s3 | check for secret_key in keystore"
+      shell: /usr/share/elasticsearch/bin/elasticsearch-keystore list | egrep -c 'secret_key'
+      environment:
+        ES_PATH_CONF: "/etc/elasticsearch/"
+      register: s3_secret_key_set
+      ignore_errors: True
+      tags: ['s3-repo']
+    
+    
+    - name: "CONFIGURE PLUGIN: s3 | add secret_key to keystore"
+      shell: echo $S3_SECRET_KEY | /usr/share/elasticsearch/bin/elasticsearch-keystore add --stdin s3.client.default.secret_key 
+      environment:
+        ES_PATH_CONF: "/etc/elasticsearch/"
+        S3_SECRET_KEY: "{{ s3_secret_key }}"
+      when: 
+        - s3_secret_key_set.rc != 0
+      tags: ['s3-repo']
+    
+    
+    - name: "CONFIGURE PLUGIN: s3 | check for access_key in keystore"
+      shell: /usr/share/elasticsearch/bin/elasticsearch-keystore list | egrep -c 'access_key'
+      environment:
+        ES_PATH_CONF: "/etc/elasticsearch/"
+      register: s3_access_key_set
+      ignore_errors: True
+      tags: ['s3-repo']
+    
+    
+    - name: "CONFIGURE PLUGIN: s3 | add access_key to keystore"
+      shell: echo $S3_ACCESS_KEY | /usr/share/elasticsearch/bin/elasticsearch-keystore add --stdin s3.client.default.access_key 
+      environment:
+        ES_PATH_CONF: "/etc/elasticsearch/"
+        S3_ACCESS_KEY: "{{ s3_access_key }}"
+      when: 
+        - s3_access_key_set.rc != 0
+      tags: ['s3-repo']
+    
+    
+    - name: "CONFIGURE PLUGIN: s3 | set permissions on elasticsearch.keystore"
+      file: path="/etc/elasticsearch/elasticsearch.keystore" owner=root group=elasticsearch mode=0660
+      tags: ['s3-repo']
+    
+    
+    - name: "CONFIGURE PLUGIN: s3 | create config file for s3cmd"
+      template: src=s3cfg.j2 dest=/root/.s3cfg owner=root group=root mode=0600
+      tags: ['s3-repo']
+    
+    
+    - name: "CONFIGURE PLUGIN: s3 | check if the 'esaas-backups' bucket exists"
+      #shell: mc ls s3:// | grep esaas #for minio
+      shell: s3cmd ls | egrep 's3://esaas-backups$'
+      register: s3_bucket_exists
+      ignore_errors: True
+      run_once: True
+      tags: ['s3-repo']
+    
+    
+    - name: "CONFIGURE PLUGIN: s3 | create the 'esaas-backups' bucket"
+      #shell: mc mb s3://esaas-backups #for minio
+      shell: s3cmd mb s3://esaas-backups
+      ignore_errors: yes
+      when:
+        - s3_bucket_exists.rc != 0
+      run_once: True
+      tags: ['s3-repo']
+    
+    - name: "CONFIGURE PLUGIN: s3 | check if the 's3-repository' has been added"
+      uri:
+        url: "{{ es_api_uri }}/_snapshot/s3_repository"
+        validate_certs: false
+        user: "{{ es_api_basic_auth_username }}"
+        password: "{{ es_api_basic_auth_password }}"
+        method: GET
+        force_basic_auth: yes
+        status_code: 200
+        body_format: json
+      run_once: True
+      ignore_errors: yes
+      register: s3_repo_created
+      tags: ['s3-repo']
+    
+    - debug:
+        var: s3_repo_created.status
+    
+    - name: "CONFIGURE PLUGIN: s3 | configure elasticsearch snapshots repo in s3"
+      uri:
+        url: "{{ es_api_uri }}/_snapshot/s3-repository"
+        validate_certs: false
+        user: "{{ es_api_basic_auth_username }}"
+        password: "{{ es_api_basic_auth_password }}"
+        method: PUT
+        body: "{{ lookup('template','configure-s3-repo.json.j2') }}"
+        force_basic_auth: yes
+        status_code: 200
+        body_format: json
+      run_once: True
+      when: s3_repo_created.status != 200
+      tags: ['s3-repo']
+
+    - debug:
+        var: s3_repo_created.status
+
+
+#    - name: "CONFIGURE PLUGIN: s3 | create /root/.local/bin directory"
+#      file: path=/root/.local/bin/ state=directory owner=root group=root mode=0750
+#      run_once: true
+#      tags: ['s3-script']
+#    - name: "CONFIGURE PLUGIN: s3 | create es-snapshot.py"
+#      copy: src=bin/es-snapshot.py dest=/root/.local/bin/es-snapshot.py owner=root group=root mode=0700
+#      run_once: true
+#      tags: ['s3-script']
+#    - name: "CONFIGURE PLUGIN: s3 | create es-snapshot-wrapper.sh"
+#      template: src=es-snapshot-wrapper.sh.j2 dest=/root/.local/bin/es-snapshot-wrapper.sh owner=root group=root mode=0700
+#      run_once: true
+#      tags: ['s3-script']
+#    - name: "CONFIGURE PLUGIN: s3 | create /etc/cron.d/ansible_es-snapshot"
+#      cron: name=es-snapshot user=root cron_file=ansible_es-snapshot job="/root/.local/bin/es-snapshot-wrapper.sh" hour="*/6" minute="0"
+#      run_once: true
+#      tags: ['s3-script']
+#
+#- name: "ES TEMPLATE"
+#  hosts: "{{ prompt_elastic_cluster_nodes }}"
+
+  # we need to make sure sensible defaults are configured for each index
+
+
+# eof

@@ -1,0 +1,35 @@
+- hosts: all
+  become: true
+  
+  tasks:
+  - name: Add EPEL repository
+    yum_repository:
+      name: epel
+      state: present
+      description: EPEL YUM repo
+      baseurl: https://download.fedoraproject.org/pub/epel/$releasever/$basearch/
+      gpgcheck: no
+    tags: ['soft']
+
+  - name: install software
+    yum:
+      state: installed
+      name: '{{ es_yum_util_packages }}'
+    tags: ['soft']
+  
+  - name: stop and disable firewalld
+    systemd:
+      name: firewalld
+      enabled: false
+      state: stopped
+    tags: ['firewall']
+
+  - name: Append IP and hostname of all hosts to all hosts /etc/hosts file
+    lineinfile:
+      dest: /etc/hosts
+      regexp: '.*{{ item }}$'
+      line: "{{ hostvars[item].ansible_host }} {{item}}"
+      state: present
+    when: hostvars[item].ansible_host is defined
+    with_items: "{{ groups.all }}"
+    tags: ['hosts']

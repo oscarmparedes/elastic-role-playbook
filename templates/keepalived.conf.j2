@@ -1,0 +1,24 @@
+#jinja2: lstrip_blocks: True
+vrrp_script chk_haproxy {
+  script "killall -0 haproxy"    # check the haproxy process
+  interval 2                     # every 2 seconds
+  weight 2                       # add 2 points if OK
+}
+
+vrrp_instance VI_1 {
+  interface {{ ansible_default_ipv4['interface'] }}      # interface to monitor
+  {% if keepalived_master %}
+  state MASTER          # MASTER on primary-node, BACKUP on secondary-node
+  priority 101          # 101 on primary-node, 100 on secondary-node
+  {% else %}
+  state BACKUP          # MASTER on primary-node, BACKUP on secondary-node
+  priority 100          # 101 on primary-node, 100 on secondary-node
+  {% endif %}
+  virtual_router_id {{ keepalived_router_id | default('51') }}
+  virtual_ipaddress {
+    {{ keepalived_vip }}        # virtual ip address
+  }
+  track_script {
+    chk_haproxy
+  }
+}

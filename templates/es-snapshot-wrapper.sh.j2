@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+export ES_ENDPOINT="https://localhost:9200/"
+export ES_USER=admin
+export ES_PASS='{{ admin_password }}'
+export ES_KEEP_SNAPSHOTS="14"
+export LOG=/var/log/es-snapshot-latest.log 
+
+echo "Running python snapshot script ..." > ${LOG}
+/root/.local/bin/es-snapshot.py --verbose >> ${LOG} 2>&1
+rc=$?
+
+echo "Script complete with return-code ${rc}" >> ${LOG}
+
+echo "Sending result to Icinga"
+if [[ ${rc} -eq 0 ]]; then
+  curl --insecure --verbose --noproxy '*' \
+    -H 'Accept: application/json' \
+    -H 'Content-Type: application/json' \
+    -H 'Authorization: Basic ZXh0ZXJuYWw6Qks0TEdKWkkxUzBuTWV6N1IyTEs=' \
+    -XPOST 'https://sol-icg01mgm-p.axadmin.net:5665/v1/actions/process-check-result' \
+    -d '{ "type": "Service", "filter": "host.name==\"{{ vip_dns_name|default("unknown") }}\" && service.name==\"Elasticsearch Snapshot\"", "exit_status": 0, "plugin_output": "OK: Snapshot process completed successfully", "pretty": true }' \
+    >> ${LOG} 2>&1
+else 
+  curl --insecure --verbose --noproxy '*' \
+    -H 'Accept: application/json' \
+    -H 'Content-Type: application/json' \
+    -H 'Authorization: Basic ZXh0ZXJuYWw6Qks0TEdKWkkxUzBuTWV6N1IyTEs=' \
+    -XPOST 'https://sol-icg01mgm-p.axadmin.net:5665/v1/actions/process-check-result' \
+    -d '{ "type": "Service", "filter": "host.name==\"{{ vip_dns_name|default("unknown") }}\" && service.name==\"Elasticsearch Snapshot\"", "exit_status": 2, "plugin_output": "ERROR: Something went wrong, check the logs", "pretty": true }' \
+    >> ${LOG} 2>&1
+fi
+
+# eof

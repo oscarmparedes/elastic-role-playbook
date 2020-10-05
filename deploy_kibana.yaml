@@ -1,0 +1,54 @@
+- hosts: kibana
+  #serial: 1
+  become: true
+  roles:
+    - role: elastic.kibana
+  tags: ['kibana']
+
+  tasks:
+  - name: add kibana user to elasticsearch group
+    user: name=kibana
+          group=kibana
+          groups=elasticsearch
+          append=yes
+    tags: ['user']
+
+  - name: create fms space
+    uri:
+        url: "{{ kibana_url }}/api/spaces/space"
+        validate_certs: false
+        user: "{{ es_api_basic_auth_username }}"
+        password: "{{ es_api_basic_auth_password }}"
+        method: POST
+        body: "{{ lookup('file','fms_space.json') }}"
+        force_basic_auth: yes
+        status_code: 200
+        body_format: json
+        headers:
+          kbn-xsrf: true
+    register: fms_space
+  #  tags: ['never','fms']
+
+  - debug:
+      var: fms_space.status
+         
+#backup all indices, including system, to s3_repository repo on a daily basis      
+  - name: create elastic snapshot backup policy from kibana
+    uri:
+        url: "{{ kibana_url }}/_slm/policy/daily-snapshots"
+        validate_certs: false
+        user: "{{ es_api_basic_auth_username }}"
+        password: "{{ es_api_basic_auth_password }}"
+        method: POST
+        body: "{{ lookup('template','kibana_daily_snapshots.json.j2') }}"
+        force_basic_auth: yes
+        status_code: 200
+        body_format: json
+        headers:
+          kbn-xsrf: true
+    register: snapshots_policy
+  #  tags: ['never','fms']
+
+  - debug:
+      var: snapshots_policy.status  
+  

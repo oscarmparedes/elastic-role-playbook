@@ -1,0 +1,14 @@
+es_yum_util_packages:
+  - httpie
+  - curl
+  - wget
+  - python
+  - python-pip
+  - python2-pyyaml
+  - nodejs
+  - s3cmd
+  - jq
+  - python36
+  - python36-requests
+  - npm
+  - vim

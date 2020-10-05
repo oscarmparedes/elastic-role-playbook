@@ -1,0 +1,15 @@
+{
+	"id": "fms",
+	"name": "fms",
+	"disabledFeatures": [
+	  "ml",
+	  "maps",
+	  "apm",
+	  "uptime",
+	  "siem",
+	  "advancedSettings",
+	  "savedObjectsManagement",
+	  "monitoring",
+	  "canvas"
+	]
+  }
